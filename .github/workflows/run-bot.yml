@@ -2,8 +2,8 @@ name: Run Free Alpaca Bot
 
 on:
   schedule:
-    - cron: '0 * * * *' # This tells GitHub to run your bot every hour automatically
-  workflow_dispatch: # This adds the "Run workflow" button so you can test it manually
+    - cron: '0 * * * *' # Automatically triggers every single hour 24/7
+  workflow_dispatch: # Gives you the manual clickable blue button to test it
 
 jobs:
   run-trading-bot:
