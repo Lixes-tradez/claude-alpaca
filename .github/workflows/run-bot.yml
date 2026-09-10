@@ -1,0 +1,28 @@
+name: Run Free Alpaca Bot
+
+on:
+  schedule:
+    - cron: '0 * * * *' # This tells GitHub to run your bot every hour automatically
+  workflow_dispatch: # This adds the "Run workflow" button so you can test it manually
+
+jobs:
+  run-trading-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install SDK Libraries
+        run: pip install google-genai alpaca-py
+
+      - name: Execute Bot Script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: python bot.py
