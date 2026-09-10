@@ -31,7 +31,7 @@ Respond strictly in this JSON format, with no extra conversational text or forma
 
 print("Consulting Free Gemini AI...")
 response = gemini_client.models.generate_content(
-    model='gemini-2.5-flash',
+    model='gemini-3.6-flash',
     contents=prompt,
 )
 
