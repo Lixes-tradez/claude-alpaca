@@ -53,7 +53,7 @@ def main():
     print("Consulting Gemini AI...")
     try:
         chat = gemini_client.chats.create(
-            model='gemini-2.0-flash',
+            model='gemini-3.6-flash',
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=DecisionSchema,
