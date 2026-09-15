@@ -12,7 +12,7 @@ from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.common.exceptions import APIError as AlpacaAPIError
 
 # Interval between trading checks (in seconds)
-RUN_INTERVAL_SECONDS = 900  # 15 minutes
+RUN_INTERVAL_SECONDS = 300  # 15 minutes
 
 
 class DecisionSchema(BaseModel):
