@@ -1,56 +1,104 @@
 import os
 import json
+import sys
+from pydantic import BaseModel, Field
 from google import genai
+from google.genai import types
+from google.genai.errors import APIError
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
+from alpaca.common.exceptions import APIError as AlpacaAPIError
 
-# 1. Pull the keys out of the hidden cloud system vault
-GOOGLE_KEY = os.environ.get("GEMINI_API_KEY")
-ALPACA_KEY = os.environ.get("ALPACA_API_KEY")
-ALPACA_SECRET = os.environ.get("ALPACA_SECRET_KEY")
 
-# 2. Connect to Alpaca and Google Gemini using those keys
-trading_client = TradingClient(
-    api_key=ALPACA_KEY,
-    secret_key=ALPACA_SECRET,
-    paper=True  # Keeps trades locked safely to your free paper account
-)
-gemini_client = genai.Client(api_key=GOOGLE_KEY)
+# Define schema for Gemini's structured output
+class DecisionSchema(BaseModel):
+    action: str = Field(description="Must be strictly BUY, SELL, or HOLD")
+    reason: str = Field(description="Short explanation for the decision")
 
-# 3. Setup the scenario for the AI to judge
-ticker = "AAPL"
-market_news = "Apple just announced a breakthrough AI product and stock volume is surging."
 
-prompt = f"""
-Analyze this news for {ticker}: "{market_news}"
-Should we BUY, SELL, or HOLD? 
-Respond strictly in this JSON format, with no extra conversational text or formatting:
-{{"action": "BUY", "reason": "short explanation"}}
-"""
+def main():
+    # 1. Validate environment variables upfront
+    google_key = os.environ.get("GEMINI_API_KEY")
+    alpaca_key = os.environ.get("ALPACA_API_KEY")
+    alpaca_secret = os.environ.get("ALPACA_SECRET_KEY")
 
-print("Consulting Free Gemini AI...")
-response = gemini_client.models.generate_content(
-    model='gemini-3.6-flash',
-    contents=prompt,
-)
+    missing_keys = []
+    if not google_key: missing_keys.append("GEMINI_API_KEY")
+    if not alpaca_key: missing_keys.append("ALPACA_API_KEY")
+    if not alpaca_secret: missing_keys.append("ALPACA_SECRET_KEY")
 
-# 4. Clean up the AI text data response
-raw_text = response.text.strip().replace("```json", "").replace("```", "")
-decision = json.loads(raw_text)
-print(f"Gemini's Decision: {decision['action']} | Reason: {decision['reason']}")
+    if missing_keys:
+        print(f"Error: Missing required environment variables: {', '.join(missing_keys)}")
+        sys.exit(1)
 
-# 5. Place the trade onto your Alpaca Paper Account
-if decision["action"] in ["BUY", "SELL"]:
-    side = OrderSide.BUY if decision["action"] == "BUY" else OrderSide.SELL
-    order = MarketOrderRequest(
-        symbol=ticker,
-        qty=1,
-        side=side,
-        time_in_force=TimeInForce.DAY
-    )
-    print(f"Submitting {decision['action']} order to Alpaca Paper...")
-    submitted_order = trading_client.submit_order(order_data=order)
-    print(f"Success! Order ID: {submitted_order.id}")
-else:
-    print("Holding position. No trade placed.")
+    # 2. Initialize Clients
+    try:
+        trading_client = TradingClient(
+            api_key=alpaca_key,
+            secret_key=alpaca_secret,
+            paper=True
+        )
+        gemini_client = genai.Client(api_key=google_key)
+    except Exception as e:
+        print(f"Failed to initialize API clients: {e}")
+        sys.exit(1)
+
+    # 3. Setup context for the AI analysis
+    ticker = "AAPL"
+    market_news = "Apple just announced a breakthrough AI product and stock volume is surging."
+    prompt = f'Analyze this news for ticker {ticker}: "{market_news}". Decide whether to BUY, SELL, or HOLD.'
+
+    # 4. Request structured output from Gemini
+    print("Consulting Gemini AI...")
+    try:
+        response = gemini_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=DecisionSchema,
+                temperature=0.1,  # Low temperature for deterministic decisions
+            )
+        )
+        
+        # Safe JSON loading backed by Pydantic response schema
+        decision = json.loads(response.text)
+        action = decision.get("action", "HOLD").upper()
+        reason = decision.get("reason", "No reason provided.")
+        
+        print(f"Gemini's Decision: {action} | Reason: {reason}")
+
+    except APIError as e:
+        print(f"Gemini API Exception: {e}")
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse JSON response: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Unexpected error during AI analysis: {e}")
+        sys.exit(1)
+
+    # 5. Execute Order on Alpaca
+    if action in ["BUY", "SELL"]:
+        side = OrderSide.BUY if action == "BUY" else OrderSide.SELL
+        order = MarketOrderRequest(
+            symbol=ticker,
+            qty=1,
+            side=side,
+            time_in_force=TimeInForce.DAY
+        )
+        try:
+            print(f"Submitting {action} order for {ticker} to Alpaca Paper...")
+            submitted_order = trading_client.submit_order(order_data=order)
+            print(f"Success! Order ID: {submitted_order.id}")
+        except AlpacaAPIError as e:
+            print(f"Alpaca API execution failed: {e}")
+        except Exception as e:
+            print(f"Unexpected error executing trade: {e}")
+    else:
+        print("Action is HOLD or unmapped. No trade executed.")
+
+
+if __name__ == "__main__":
+    main()
