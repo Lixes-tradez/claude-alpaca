@@ -11,14 +11,14 @@ from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.common.exceptions import APIError as AlpacaAPIError
 
 
-# Define schema for Gemini's structured output
+# 1. Define schema for Gemini's structured output
 class DecisionSchema(BaseModel):
     action: str = Field(description="Must be strictly BUY, SELL, or HOLD")
     reason: str = Field(description="Short explanation for the decision")
 
 
 def main():
-    # 1. Validate environment variables upfront
+    # 2. Validate environment variables upfront
     google_key = os.environ.get("GEMINI_API_KEY")
     alpaca_key = os.environ.get("ALPACA_API_KEY")
     alpaca_secret = os.environ.get("ALPACA_SECRET_KEY")
@@ -32,7 +32,7 @@ def main():
         print(f"Error: Missing required environment variables: {', '.join(missing_keys)}")
         sys.exit(1)
 
-    # 2. Initialize Clients
+    # 3. Initialize Clients
     try:
         trading_client = TradingClient(
             api_key=alpaca_key,
@@ -44,23 +44,23 @@ def main():
         print(f"Failed to initialize API clients: {e}")
         sys.exit(1)
 
-    # 3. Setup context for the AI analysis
+    # 4. Setup context for AI analysis
     ticker = "AAPL"
     market_news = "Apple just announced a breakthrough AI product and stock volume is surging."
     prompt = f'Analyze this news for ticker {ticker}: "{market_news}". Decide whether to BUY, SELL, or HOLD.'
 
-    # 4. Request structured output from Gemini
+    # 5. Request structured output via chat session (eliminates AFC warning)
     print("Consulting Gemini AI...")
     try:
-        response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt,
+        chat = gemini_client.chats.create(
+            model='gemini-2.0-flash',
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=DecisionSchema,
-                temperature=0.1,  # Low temperature for deterministic decisions
+                temperature=0.1,
             )
         )
+        response = chat.send_message(prompt)
         
         # Safe JSON loading backed by Pydantic response schema
         decision = json.loads(response.text)
@@ -79,7 +79,7 @@ def main():
         print(f"Unexpected error during AI analysis: {e}")
         sys.exit(1)
 
-    # 5. Execute Order on Alpaca
+    # 6. Execute Order on Alpaca
     if action in ["BUY", "SELL"]:
         side = OrderSide.BUY if action == "BUY" else OrderSide.SELL
         order = MarketOrderRequest(
