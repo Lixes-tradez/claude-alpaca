@@ -19,7 +19,7 @@ from alpaca.common.exceptions import APIError as AlpacaAPIError
 LIVE_TRADING = False  
 
 # Execution Frequency (in seconds)
-RUN_INTERVAL_SECONDS = 300  # 5 minutes
+RUN_INTERVAL_SECONDS = 60  # 5 minutes
 
 # ==============================================================================
 # INJECTABLE TRADING STRATEGY SETUP
